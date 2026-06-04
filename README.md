@@ -1,18 +1,29 @@
 # sportsh
 
-A React-based CLI for checking sports schedules and recent results.
+A CLI for checking sports schedules and recent results.
 
-Initial scope:
+## Usage
 
-- `sportsh today`
-- `sportsh events`
-- `sportsh results`
-- Cricket from ESPNcricinfo
-- Cycling from Course du Jour
-- Raw HTTP page caching
-- A separated domain/core/provider/CLI architecture
+```sh
+sportsh today [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
+sportsh events [--date YYYY-MM-DD] [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
+sportsh results [--date YYYY-MM-DD] [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
+```
 
-## Run
+Every event shows its source site because this CLI is a front-end over existing sports websites. `sportsh` should be a responsible consumer: disclose and promote sources clearly, and do not use sources that signal they do not want automated access, such as Cloudflare challenge pages or persistent blocking.
+
+Supported sport keys:
+
+- `cricket`
+- `cycling`
+- `f1`
+- `rally`
+- `triathlon`
+- `marathon`
+- `afl`
+
+
+## Development
 
 ```sh
 npm install
@@ -34,13 +45,3 @@ $XDG_CACHE_HOME/sportsh
 ```
 
 Use `--fresh` to bypass the TTL.
-
-## Commands
-
-```sh
-sportsh today [--sport cricket,cycling] [--fresh]
-sportsh events [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
-sportsh results [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
-```
-
-Every event shows its source site because this CLI is a front-end over existing sports websites.

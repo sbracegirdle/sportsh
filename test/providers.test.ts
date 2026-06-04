@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseEspnCricinfoToday } from "../src/providers/cricket/espnCricinfo.ts";
 import { parseCourseDuJourToday, parseDomestiqueResults } from "../src/providers/cycling/courseDuJour.ts";
+import { parseFootyWireFixture } from "../src/providers/afl/footyWire.ts";
 
 test("parseEspnCricinfoToday extracts cricket events from embedded JSON", async () => {
   const html = await readFile(new URL("./fixtures/espncricinfo-live.html", import.meta.url), "utf8");
@@ -60,4 +61,18 @@ test("parseDomestiqueResults extracts cycling winners from the results data", as
   assert.equal(events[1]?.name, "Giro d'Italia Women Stage 5");
   assert.equal(events[1]?.resultSummary, "Demi Vollering won");
   assert.equal(events[1]?.detail, "mountains · Longarone to Santo Stefano di Cadore");
+});
+
+test("parseFootyWireFixture extracts AFL fixtures and results", async () => {
+  const html = await readFile(new URL("./fixtures/footywire-afl.html", import.meta.url), "utf8");
+  const events = parseFootyWireFixture(html);
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0]?.name, "Sydney v Carlton");
+  assert.equal(events[0]?.status, "final");
+  assert.equal(events[0]?.resultSummary, "132-69");
+  assert.equal(events[0]?.detail, "SCG");
+  assert.equal(events[1]?.name, "Carlton v Richmond");
+  assert.equal(events[1]?.status, "scheduled");
+  assert.equal(events[1]?.startTime, "2026-03-13T19:40:00+08:00");
 });

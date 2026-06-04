@@ -97,3 +97,35 @@ test("listEvents throws when every selected provider fails", async () => {
     /All selected sports providers failed/,
   );
 });
+
+test("listEvents expands to the provider next event when the requested date is empty", async () => {
+  const providers: SportsProvider[] = [
+    {
+      sport: "f1",
+      async listEvents() {
+        return [];
+      },
+      async listResults() {
+        return [];
+      },
+      async nextEvent() {
+        return [{
+          id: "next",
+          sport: "f1",
+          name: "Next Grand Prix",
+          source: "test",
+          sourceUrl: "https://example.test/f1",
+          status: "scheduled",
+          startTime: "2026-06-05",
+        }];
+      },
+    },
+  ];
+
+  const events = await listEvents(providers, {
+    date: new Date("2026-06-04T00:00:00.000Z"),
+    sports: ["f1"],
+  });
+
+  assert.deepEqual(events.map((event) => event.id), ["next"]);
+});

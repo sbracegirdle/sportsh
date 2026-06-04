@@ -49,12 +49,12 @@ function printHelp(): void {
   console.log(`sportsh
 
 Usage:
-  sportsh today [--sport cricket,cycling] [--fresh]
-  sportsh events [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
-  sportsh results [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
+  sportsh today [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
+  sportsh events [--date YYYY-MM-DD] [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
+  sportsh results [--date YYYY-MM-DD] [--sport cricket,cycling,f1,rally,triathlon,marathon,afl] [--fresh]
 
 Options:
-  -s, --sport   Limit sports to cricket, cycling, or a comma-separated list
+  -s, --sport   Limit sports to one or more comma-separated sport keys
   -d, --date    Date to list, in YYYY-MM-DD format
   --fresh       Ignore cached pages and fetch again
   -h, --help    Show help

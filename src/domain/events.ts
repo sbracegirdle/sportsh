@@ -1,4 +1,4 @@
-export type Sport = "cricket" | "cycling";
+export type Sport = "cricket" | "cycling" | "f1" | "rally" | "triathlon" | "marathon" | "afl";
 
 export type EventStatus = "scheduled" | "live" | "final" | "unknown";
 
@@ -26,6 +26,7 @@ export type SportsProvider = {
   readonly sport: Sport;
   listEvents(context: ProviderContext): Promise<SportsEvent[]>;
   listResults(context: ProviderContext): Promise<SportsEvent[]>;
+  nextEvent?(context: ProviderContext): Promise<SportsEvent[]>;
 };
 
 export type EventFact = {

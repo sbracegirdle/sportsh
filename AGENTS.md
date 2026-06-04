@@ -19,7 +19,13 @@ CLI rules:
 - Do not let Ink components know about provider-specific page shapes.
 - Add flags at the CLI boundary, pass plain options into core code.
 - Always render the source name and source URL for each event/result. `sportsh` is a front-end to existing sites, not an authoritative data source.
+- Always disclose and promote sources clearly. This project should act as a responsible consumer of other sites' work.
 - Keep `results` separate from event listing commands because results imply spoilers.
+
+Source responsibility:
+- Never use a source that signals it does not want automated access, including Cloudflare challenge pages, persistent 403s, robots-style blocking, or similar anti-bot measures.
+- If a source blocks native fetch or otherwise resists direct use, find another source instead of bypassing the block.
+- Prefer public pages that are accessible with ordinary HTTP requests and keep attribution visible in the CLI.
 
 Testing:
 - Use Node's built-in `node:test` runner and `node:assert/strict`.

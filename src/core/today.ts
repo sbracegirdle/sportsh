@@ -10,7 +10,12 @@ export async function listEvents(
   providers: readonly SportsProvider[],
   options: EventListOptions = {},
 ): Promise<SportsEvent[]> {
-  return collectFromProviders(providers, "listEvents", options);
+  const events = await collectFromProviders(providers, "listEvents", options);
+  if (events.length > 0) {
+    return events;
+  }
+
+  return listNextEvents(providers, options);
 }
 
 export async function listResults(
@@ -54,6 +59,45 @@ async function collectFromProviders(
 
   return events
     .sort(compareEvents);
+}
+
+async function listNextEvents(
+  providers: readonly SportsProvider[],
+  options: EventListOptions,
+): Promise<SportsEvent[]> {
+  const selectedSports = new Set(options.sports ?? providers.map((provider) => provider.sport));
+  const selectedProviders = providers.filter((provider) => selectedSports.has(provider.sport));
+  const startDate = options.date ?? new Date();
+  const fresh = options.fresh ?? false;
+  const lookaheadDays = 370;
+  const nextEvents: SportsEvent[] = [];
+
+  for (const provider of selectedProviders) {
+    if (provider.nextEvent) {
+      nextEvents.push(...await provider.nextEvent({ date: startDate, fresh }));
+      continue;
+    }
+
+    for (let offset = 1; offset <= lookaheadDays; offset += 1) {
+      const date = addDays(startDate, offset);
+      const events = await provider.listEvents({ date, fresh });
+      if (events.length > 0) {
+        nextEvents.push(...events.map((event) => ({
+          ...event,
+          detail: event.detail ? `Next scheduled: ${event.detail}` : "Next scheduled",
+        })));
+        break;
+      }
+    }
+  }
+
+  return nextEvents.sort(compareEvents);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function compareEvents(left: SportsEvent, right: SportsEvent): number {
