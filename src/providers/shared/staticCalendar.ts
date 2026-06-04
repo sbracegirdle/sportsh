@@ -5,6 +5,9 @@ export type StaticCalendarEvent = {
   name: string;
   startDate: string;
   endDate?: string;
+  source?: string;
+  sourceUrl?: string;
+  startListUrl?: string;
   competition?: string;
   detail?: string;
   facts?: Array<{ label: string; value: string }>;
@@ -22,13 +25,10 @@ export function createStaticCalendarProvider(options: StaticCalendarOptions): Sp
   return {
     sport: options.sport,
     async listEvents(context) {
-      await fetchCachedText(options.sourceUrl, {
-        fresh: context.fresh,
-        ttlMs: options.ttlMs ?? 24 * 60 * 60 * 1000,
-      });
+      const events = options.events.filter((event) => happensOnDate(event, context.date));
+      await fetchEventSources(options, events, context.fresh);
 
-      return options.events
-        .filter((event) => happensOnDate(event, context.date))
+      return events
         .map((event) => toSportsEvent(options, event, options.events.indexOf(event), context.date));
     },
     async listResults() {
@@ -46,6 +46,7 @@ export function createStaticCalendarProvider(options: StaticCalendarOptions): Sp
         return [];
       }
 
+      await fetchEventSources(options, [next], context.fresh);
       return [toSportsEvent(options, next, options.events.indexOf(next), new Date(`${next.startDate}T00:00:00.000Z`), "Next scheduled")];
     },
   };
@@ -64,8 +65,9 @@ function toSportsEvent(
     id: `${options.sport}:${event.startDate}:${index}:${event.name}`,
     sport: options.sport,
     name: event.name,
-    source: options.source,
-    sourceUrl: options.sourceUrl,
+    source: event.source ?? options.source,
+    sourceUrl: event.sourceUrl ?? options.sourceUrl,
+    startListUrl: event.startListUrl ?? event.sourceUrl ?? options.sourceUrl,
     status: eventEndsBefore(event, date) ? "final" : "scheduled",
     startTime: event.startDate,
     competition: event.competition,
@@ -89,4 +91,16 @@ function eventEndsBefore(event: StaticCalendarEvent, date: Date): boolean {
 
 function fact(label: string, value: string): { label: string; value: string } {
   return { label, value };
+}
+
+async function fetchEventSources(options: StaticCalendarOptions, events: readonly StaticCalendarEvent[], fresh: boolean): Promise<void> {
+  const sourceUrls = new Set(events.map((event) => event.sourceUrl ?? options.sourceUrl));
+  if (sourceUrls.size === 0) {
+    sourceUrls.add(options.sourceUrl);
+  }
+
+  await Promise.all([...sourceUrls].map((url) => fetchCachedText(url, {
+    fresh,
+    ttlMs: options.ttlMs ?? 24 * 60 * 60 * 1000,
+  })));
 }

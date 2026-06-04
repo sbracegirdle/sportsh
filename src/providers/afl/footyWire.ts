@@ -70,6 +70,7 @@ export function parseFootyWireFixture(html: string, date?: Date): SportsEvent[] 
     }
 
     const teams = cells[1].replace(/\s+v\s+/, " v ");
+    const [homeTeam, awayTeam] = teams.split(" v ");
     const venue = cells[2];
     const score = cells[4];
     const isFinal = Boolean(score.match(/^\d+-\d+$/));
@@ -83,6 +84,11 @@ export function parseFootyWireFixture(html: string, date?: Date): SportsEvent[] 
       status: isFinal ? "final" : "scheduled",
       startTime,
       competition: "AFL Premiership",
+      participants: [homeTeam, awayTeam].filter(Boolean),
+      startList: [
+        homeTeam ? { name: homeTeam, role: "Home" } : undefined,
+        awayTeam ? { name: awayTeam, role: "Away" } : undefined,
+      ].filter((participant): participant is { name: string; role: string } => Boolean(participant)),
       resultSummary: isFinal ? score : undefined,
       detail: venue,
       facts: [

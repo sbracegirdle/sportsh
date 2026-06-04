@@ -211,6 +211,7 @@ function resultFromStage(stage: unknown, index: number): SportsEvent | undefined
     status: "final",
     startTime: stageDate,
     competition: [category, gender].filter(Boolean).join(" ") || undefined,
+    startList: participantsFromRanking(object),
     resultSummary: `${winner} won`,
     detail: [courseType, startTown && endTown ? `${startTown} to ${endTown}` : undefined].filter(Boolean).join(" · ") || undefined,
     facts: [
@@ -227,6 +228,29 @@ function winnerFromStage(stage: Record<string, unknown>): string | undefined {
   const ranking = Array.isArray(stage.riderRanking) ? stage.riderRanking : [];
   const winner = ranking.find((entry) => entry && typeof entry === "object" && (entry as Record<string, unknown>).ranking === 1);
   return winner && typeof winner === "object" ? stringFrom((winner as Record<string, unknown>).title) : undefined;
+}
+
+function participantsFromRanking(stage: Record<string, unknown>) {
+  const ranking = Array.isArray(stage.riderRanking) ? stage.riderRanking : [];
+  return ranking
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => {
+      const rider = entry as Record<string, unknown>;
+      const country = rider.country && typeof rider.country === "object" ? rider.country as Record<string, unknown> : undefined;
+      const team = rider.team && typeof rider.team === "object" ? rider.team as Record<string, unknown> : undefined;
+      const rank = stringFrom(rider.ranking);
+
+      return removeUndefined({
+        name: stringFrom(rider.title) ?? "Unknown rider",
+        nationality: stringFrom(country?.short),
+        team: stringFrom(team?.name) ?? stringFrom(team?.title),
+        role: rank ? `#${rank}` : undefined,
+      });
+    });
+}
+
+function removeUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)) as T;
 }
 
 function extractJsonVariables(html: string, name: string): unknown[] {

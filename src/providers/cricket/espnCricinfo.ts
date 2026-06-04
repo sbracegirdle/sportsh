@@ -64,6 +64,7 @@ export function parseEspnCricinfoToday(html: string): SportsEvent[] {
       startTime,
       competition: series,
       participants: teams,
+      startList: teams.map((team) => ({ name: team, role: "Team" })),
       resultSummary: firstString(object.statusText, object.result, object.resultText),
       detail: venue,
       facts: [

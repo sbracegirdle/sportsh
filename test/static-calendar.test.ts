@@ -17,6 +17,7 @@ test("static calendar provider lists events that overlap the requested date", as
         name: "Test Grand Prix",
         startDate: "2026-06-05",
         endDate: "2026-06-07",
+        startListUrl: "https://example.test/start-list",
         competition: "Formula 1",
         detail: "Test Circuit",
       }],
@@ -30,6 +31,7 @@ test("static calendar provider lists events that overlap the requested date", as
     assert.equal(events.length, 1);
     assert.equal(events[0]?.name, "Test Grand Prix");
     assert.equal(events[0]?.source, "Test Source");
+    assert.equal(events[0]?.startListUrl, "https://example.test/start-list");
     assert.equal(events[0]?.status, "scheduled");
   } finally {
     globalThis.fetch = originalFetch;

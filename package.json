@@ -12,6 +12,7 @@
     "today": "node ./src/cli.ts today",
     "events": "node ./src/cli.ts events",
     "results": "node ./src/cli.ts results",
+    "startlist": "node ./src/cli.ts startlist",
     "test": "node --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

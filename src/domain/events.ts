@@ -12,6 +12,8 @@ export type SportsEvent = {
   startTime?: string;
   competition?: string;
   participants?: string[];
+  startList?: EventParticipant[];
+  startListUrl?: string;
   resultSummary?: string;
   detail?: string;
   facts?: EventFact[];
@@ -32,4 +34,11 @@ export type SportsProvider = {
 export type EventFact = {
   label: string;
   value: string;
+};
+
+export type EventParticipant = {
+  name: string;
+  nationality?: string;
+  team?: string;
+  role?: string;
 };

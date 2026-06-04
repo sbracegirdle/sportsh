@@ -17,14 +17,18 @@ try {
   };
   const events = args.command === "results"
     ? await listResults(providers, options)
-    : args.command === "events"
+    : args.command === "events" || args.command === "startlist"
       ? await listEvents(providers, options)
       : await getTodayEvents(providers, options);
+  const filteredEvents = args.event
+    ? events.filter((event) => event.name.toLowerCase().includes(args.event?.toLowerCase() ?? ""))
+    : events;
 
   render(React.createElement(App, {
     command: args.command,
     date: args.date,
-    events,
+    events: filteredEvents,
+    eventFilter: args.event,
     selectedSports: args.sports,
   }));
 } catch (error) {

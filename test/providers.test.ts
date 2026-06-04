@@ -61,6 +61,10 @@ test("parseDomestiqueResults extracts cycling winners from the results data", as
   assert.equal(events[1]?.name, "Giro d'Italia Women Stage 5");
   assert.equal(events[1]?.resultSummary, "Demi Vollering won");
   assert.equal(events[1]?.detail, "mountains · Longarone to Santo Stefano di Cadore");
+  assert.deepEqual(events[1]?.startList?.slice(0, 2), [
+    { name: "Demi Vollering", role: "#1" },
+    { name: "Anna van der Breggen", role: "#2" },
+  ]);
 });
 
 test("parseFootyWireFixture extracts AFL fixtures and results", async () => {
@@ -75,4 +79,8 @@ test("parseFootyWireFixture extracts AFL fixtures and results", async () => {
   assert.equal(events[1]?.name, "Carlton v Richmond");
   assert.equal(events[1]?.status, "scheduled");
   assert.equal(events[1]?.startTime, "2026-03-13T19:40:00+08:00");
+  assert.deepEqual(events[1]?.startList, [
+    { name: "Carlton", role: "Home" },
+    { name: "Richmond", role: "Away" },
+  ]);
 });
