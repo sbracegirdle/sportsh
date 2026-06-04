@@ -1,0 +1,28 @@
+{
+  "name": "sportsh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A React-based CLI for sports schedules and results.",
+  "type": "module",
+  "bin": {
+    "sportsh": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "node ./src/cli.ts",
+    "today": "node ./src/cli.ts today",
+    "test": "node --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "^5.1.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/react": "^18.3.23",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=23.6.0"
+  }
+}
