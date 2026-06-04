@@ -14,6 +14,7 @@ export type SportsEvent = {
   participants?: string[];
   resultSummary?: string;
   detail?: string;
+  facts?: EventFact[];
 };
 
 export type ProviderContext = {
@@ -23,5 +24,11 @@ export type ProviderContext = {
 
 export type SportsProvider = {
   readonly sport: Sport;
-  today(context: ProviderContext): Promise<SportsEvent[]>;
+  listEvents(context: ProviderContext): Promise<SportsEvent[]>;
+  listResults(context: ProviderContext): Promise<SportsEvent[]>;
+};
+
+export type EventFact = {
+  label: string;
+  value: string;
 };

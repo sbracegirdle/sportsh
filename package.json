@@ -10,6 +10,8 @@
   "scripts": {
     "start": "node ./src/cli.ts",
     "today": "node ./src/cli.ts today",
+    "events": "node ./src/cli.ts events",
+    "results": "node ./src/cli.ts results",
     "test": "node --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -11,11 +11,15 @@ Provider rules:
 - Cache fetched pages/results through `src/providers/shared/cache.ts`; do not add ad hoc cache writes in provider files.
 - Prefer parsing cached/fetched source pages into the common `SportsEvent` model before returning data to core code.
 - If a site changes markup, fix that provider without changing the domain model or CLI unless the product behavior changes.
+- Providers should expose generic event listing and spoiler-oriented results through the domain provider interface. Avoid command-specific provider methods like `today`.
+- Add sport-specific enrichment as domain facts where the source provides it, such as cricket series/venue/weather and cycling course/start/end/weather. Do not invent facts that are not present or clearly derivable.
 
 CLI rules:
 - Keep output readable in narrow terminals.
 - Do not let Ink components know about provider-specific page shapes.
 - Add flags at the CLI boundary, pass plain options into core code.
+- Always render the source name and source URL for each event/result. `sportsh` is a front-end to existing sites, not an authoritative data source.
+- Keep `results` separate from event listing commands because results imply spoilers.
 
 Testing:
 - Use Node's built-in `node:test` runner and `node:assert/strict`.

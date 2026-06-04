@@ -8,13 +8,23 @@ const LIVE_SCORES_URL = "https://www.espncricinfo.com/live-cricket-score";
 export function createEspnCricinfoProvider(): SportsProvider {
   return {
     sport: "cricket",
-    async today(context) {
+    async listEvents(context) {
       const html = await fetchCachedText(LIVE_SCORES_URL, {
         fresh: context.fresh,
         ttlMs: 5 * 60 * 1000,
       });
 
       return parseEspnCricinfoToday(html)
+        .filter((event) => happensOnDate(event.startTime, context.date));
+    },
+    async listResults(context) {
+      const html = await fetchCachedText(LIVE_SCORES_URL, {
+        fresh: context.fresh,
+        ttlMs: 5 * 60 * 1000,
+      });
+
+      return parseEspnCricinfoToday(html)
+        .filter((event) => event.status === "final")
         .filter((event) => happensOnDate(event.startTime, context.date));
     },
   };
@@ -40,6 +50,8 @@ export function parseEspnCricinfoToday(html: string): SportsEvent[] {
     const name = title && title !== matchup ? `${matchup} (${title})` : matchup;
     const href = stringFrom(object.href) ?? stringFrom(object.url) ?? stringFrom(object.slug);
     const startTime = firstString(object.startTime, object.startDate);
+    const series = firstString(object.seriesName, object.competitionName, object.league) ?? nameFromNestedObject(object.series);
+    const venue = firstString(object.description, object.subtitle, object.groundName, object.venue) ?? nameFromNestedObject(object.ground);
 
     events.set(id, {
       id: `cricket:${id}`,
@@ -49,10 +61,15 @@ export function parseEspnCricinfoToday(html: string): SportsEvent[] {
       sourceUrl: absoluteCricinfoUrl(href),
       status: statusFromText(statusText || undefined),
       startTime,
-      competition: firstString(object.seriesName, object.competitionName, object.league) ?? nameFromNestedObject(object.series),
+      competition: series,
       participants: teams,
       resultSummary: firstString(object.statusText, object.result, object.resultText),
-      detail: firstString(object.description, object.subtitle, object.groundName, object.venue) ?? nameFromNestedObject(object.ground),
+      detail: venue,
+      facts: [
+        fact("Series", series),
+        fact("Venue", venue),
+        fact("Weather", firstString(object.weather, object.weatherSummary)),
+      ].filter((item): item is { label: string; value: string } => Boolean(item)),
     });
   });
 
@@ -149,4 +166,8 @@ function isNonEmptyString(value: string | undefined): value is string {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function fact(label: string, value: string | undefined): { label: string; value: string } | undefined {
+  return value ? { label, value } : undefined;
 }

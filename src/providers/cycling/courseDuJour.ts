@@ -8,13 +8,22 @@ const HOME_URL = "https://coursedujour.com/";
 export function createCourseDuJourProvider(): SportsProvider {
   return {
     sport: "cycling",
-    async today(context) {
-      const html = await fetchCachedText(HOME_URL, {
+    async listEvents(context) {
+      const html = await fetchCachedText(urlForDate(context.date), {
         fresh: context.fresh,
         ttlMs: 15 * 60 * 1000,
       });
 
       return parseCourseDuJourToday(html, context.date);
+    },
+    async listResults(context) {
+      const html = await fetchCachedText(urlForDate(context.date), {
+        fresh: context.fresh,
+        ttlMs: 15 * 60 * 1000,
+      });
+
+      return parseCourseDuJourToday(html, context.date)
+        .filter((event) => event.status === "final");
     },
   };
 }
@@ -40,6 +49,7 @@ function raceFromListItem(itemHtml: string, index: number, now: Date, buildDate:
   const endTime = attribute(itemHtml, "data-utc-end");
   const classification = stripTags(itemHtml.match(/<span class="font-medium uppercase tracking-wide"[^>]*>(?<classification>[\s\S]*?)<\/span>/)?.groups?.classification ?? "");
   const location = locationFromItem(itemHtml);
+  const towns = townsFromLocation(location);
   const broadcast = firstBroadcast(itemHtml);
   const detail = [classification, location, broadcast].filter(Boolean).join(" · ");
 
@@ -53,6 +63,13 @@ function raceFromListItem(itemHtml: string, index: number, now: Date, buildDate:
     startTime,
     competition: classification || undefined,
     detail: detail || undefined,
+    facts: [
+      fact("Course", classification),
+      fact("Start town", towns.startTown),
+      fact("End town", towns.endTown),
+      fact("Weather", undefined),
+      fact("Coverage", broadcast),
+    ].filter((item): item is { label: string; value: string } => Boolean(item)),
   };
 }
 
@@ -102,4 +119,26 @@ function firstBroadcast(itemHtml: string): string | undefined {
 function attribute(html: string, name: string): string | undefined {
   const value = html.match(new RegExp(`${name}="(?<value>[^"]+)"`))?.groups?.value;
   return value ? decodeHtml(value).trim() : undefined;
+}
+
+function urlForDate(date: Date): string {
+  const dateKey = date.toISOString().slice(0, 10);
+  return isSameUtcDay(date, new Date()) ? HOME_URL : new URL(`/day/${dateKey}/`, HOME_URL).toString();
+}
+
+function isSameUtcDay(left: Date, right: Date): boolean {
+  return left.toISOString().slice(0, 10) === right.toISOString().slice(0, 10);
+}
+
+function townsFromLocation(location: string | undefined): { startTown?: string; endTown?: string } {
+  if (!location) {
+    return {};
+  }
+
+  const town = location.split(",")[0]?.trim();
+  return town ? { startTown: town, endTown: town } : {};
+}
+
+function fact(label: string, value: string | undefined): { label: string; value: string } | undefined {
+  return value ? { label, value } : undefined;
 }

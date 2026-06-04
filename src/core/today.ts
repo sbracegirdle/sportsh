@@ -1,14 +1,36 @@
 import type { SportsEvent, SportsProvider } from "../domain/events.ts";
 
-export type TodayOptions = {
+export type EventListOptions = {
   date?: Date;
   sports?: readonly string[];
   fresh?: boolean;
 };
 
+export async function listEvents(
+  providers: readonly SportsProvider[],
+  options: EventListOptions = {},
+): Promise<SportsEvent[]> {
+  return collectFromProviders(providers, "listEvents", options);
+}
+
+export async function listResults(
+  providers: readonly SportsProvider[],
+  options: EventListOptions = {},
+): Promise<SportsEvent[]> {
+  return collectFromProviders(providers, "listResults", options);
+}
+
 export async function getTodayEvents(
   providers: readonly SportsProvider[],
-  options: TodayOptions = {},
+  options: EventListOptions = {},
+): Promise<SportsEvent[]> {
+  return listEvents(providers, { ...options, date: options.date ?? new Date() });
+}
+
+async function collectFromProviders(
+  providers: readonly SportsProvider[],
+  method: "listEvents" | "listResults",
+  options: EventListOptions,
 ): Promise<SportsEvent[]> {
   const selectedSports = new Set(options.sports ?? providers.map((provider) => provider.sport));
   const date = options.date ?? new Date();
@@ -17,7 +39,7 @@ export async function getTodayEvents(
   const settled = await Promise.allSettled(
     providers
       .filter((provider) => selectedSports.has(provider.sport))
-      .map((provider) => provider.today({ date, fresh })),
+      .map((provider) => provider[method]({ date, fresh })),
   );
 
   const events = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));

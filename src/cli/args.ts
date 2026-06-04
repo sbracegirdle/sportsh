@@ -1,16 +1,18 @@
 export type CliArgs = {
-  command: "today";
+  command: "events" | "today" | "results";
+  date: Date;
   sports: string[];
   fresh: boolean;
 };
 
 export function parseArgs(argv: readonly string[]): CliArgs {
   const args = [...argv];
-  const command = args[0] === "today" || !args[0] ? "today" : fail(`Unknown command: ${args[0]}`);
+  const command = commandFromArg(args[0]);
   const sports: string[] = [];
   let fresh = false;
+  let date = new Date();
 
-  for (let index = command === "today" && args[0] === "today" ? 1 : 0; index < args.length; index += 1) {
+  for (let index = args[0] && ["events", "today", "results"].includes(args[0]) ? 1 : 0; index < args.length; index += 1) {
     const arg = args[index];
 
     if (arg === "--fresh") {
@@ -25,6 +27,13 @@ export function parseArgs(argv: readonly string[]): CliArgs {
       continue;
     }
 
+    if (arg === "--date" || arg === "-d") {
+      const value = args[index + 1] ?? fail(`${arg} requires a YYYY-MM-DD value`);
+      date = parseDate(value);
+      index += 1;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -33,7 +42,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     fail(`Unknown option: ${arg}`);
   }
 
-  return { command, sports, fresh };
+  return { command, date, sports, fresh };
 }
 
 function printHelp(): void {
@@ -41,12 +50,45 @@ function printHelp(): void {
 
 Usage:
   sportsh today [--sport cricket,cycling] [--fresh]
+  sportsh events [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
+  sportsh results [--date YYYY-MM-DD] [--sport cricket,cycling] [--fresh]
 
 Options:
   -s, --sport   Limit sports to cricket, cycling, or a comma-separated list
+  -d, --date    Date to list, in YYYY-MM-DD format
   --fresh       Ignore cached pages and fetch again
   -h, --help    Show help
 `);
+}
+
+function commandFromArg(arg: string | undefined): CliArgs["command"] {
+  if (!arg) {
+    return "today";
+  }
+
+  if (arg === "events" || arg === "today" || arg === "results") {
+    return arg;
+  }
+
+  if (arg === "--help" || arg === "-h") {
+    printHelp();
+    process.exit(0);
+  }
+
+  return fail(`Unknown command: ${arg}`);
+}
+
+function parseDate(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    fail(`Invalid date: ${value}`);
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    fail(`Invalid date: ${value}`);
+  }
+
+  return date;
 }
 
 function fail(message: string): never {

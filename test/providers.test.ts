@@ -15,6 +15,10 @@ test("parseEspnCricinfoToday extracts cricket events from embedded JSON", async 
   assert.deepEqual(events[0]?.participants, ["Australia", "India"]);
   assert.equal(events[0]?.competition, "Test Trophy");
   assert.equal(events[0]?.startTime, "2026-06-04T11:30:00.000Z");
+  assert.deepEqual(events[0]?.facts, [
+    { label: "Series", value: "Test Trophy" },
+    { label: "Venue", value: "Perth Stadium" },
+  ]);
 });
 
 test("parseCourseDuJourToday extracts race rows from the daily schedule", async () => {
@@ -28,4 +32,10 @@ test("parseCourseDuJourToday extracts race rows from the daily schedule", async 
   assert.equal(events[0]?.status, "live");
   assert.equal(events[0]?.competition, "2.Pro (Men)");
   assert.equal(events[0]?.detail, "2.Pro (Men) · Dison, Belgium · Eurosport / HBO Max (EUR)");
+  assert.deepEqual(events[0]?.facts, [
+    { label: "Course", value: "2.Pro (Men)" },
+    { label: "Start town", value: "Dison" },
+    { label: "End town", value: "Dison" },
+    { label: "Coverage", value: "Eurosport / HBO Max (EUR)" },
+  ]);
 });
