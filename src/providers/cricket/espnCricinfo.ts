@@ -4,6 +4,7 @@ import { extractNextData, walkJson } from "../shared/html.ts";
 
 const SOURCE = "ESPNcricinfo";
 const LIVE_SCORES_URL = "https://www.espncricinfo.com/live-cricket-score";
+const RESULTS_URL = "https://www.espncricinfo.com/live-cricket-match-results";
 
 export function createEspnCricinfoProvider(): SportsProvider {
   return {
@@ -18,7 +19,7 @@ export function createEspnCricinfoProvider(): SportsProvider {
         .filter((event) => happensOnDate(event.startTime, context.date));
     },
     async listResults(context) {
-      const html = await fetchCachedText(LIVE_SCORES_URL, {
+      const html = await fetchCachedText(RESULTS_URL, {
         fresh: context.fresh,
         ttlMs: 5 * 60 * 1000,
       });

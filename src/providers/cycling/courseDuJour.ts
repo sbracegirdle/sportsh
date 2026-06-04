@@ -4,6 +4,8 @@ import { decodeHtml, stripTags } from "../shared/html.ts";
 
 const SOURCE = "Course du Jour";
 const HOME_URL = "https://coursedujour.com/";
+const RESULTS_SOURCE = "Domestique";
+const RESULTS_BASE_URL = "https://www.domestiquecycling.com/en/cycling-results/";
 
 export function createCourseDuJourProvider(): SportsProvider {
   return {
@@ -17,13 +19,31 @@ export function createCourseDuJourProvider(): SportsProvider {
       return parseCourseDuJourToday(html, context.date);
     },
     async listResults(context) {
-      const html = await fetchCachedText(urlForDate(context.date), {
+      const resultsHtml = await fetchCachedText(resultsUrlForYear(context.date), {
         fresh: context.fresh,
         ttlMs: 15 * 60 * 1000,
       });
 
-      return parseCourseDuJourToday(html, context.date)
-        .filter((event) => event.status === "final");
+      const scheduleHtml = await fetchCachedText(urlForDate(context.date), {
+        fresh: context.fresh,
+        ttlMs: 15 * 60 * 1000,
+      });
+
+      const scheduleEvents = parseCourseDuJourToday(scheduleHtml, context.date);
+      const stageResultPages = await Promise.all(
+        scheduleEvents
+          .map((event) => domestiqueStageUrl(event.name, context.date))
+          .filter((url): url is string => Boolean(url))
+          .map((url) => fetchCachedText(url, {
+            fresh: context.fresh,
+            ttlMs: 15 * 60 * 1000,
+          }).catch(() => undefined)),
+      );
+
+      return uniqueEvents([
+        ...parseDomestiqueResults(resultsHtml, context.date),
+        ...stageResultPages.flatMap((html) => html ? parseDomestiqueResults(html, context.date) : []),
+      ]);
     },
   };
 }
@@ -141,4 +161,193 @@ function townsFromLocation(location: string | undefined): { startTown?: string; 
 
 function fact(label: string, value: string | undefined): { label: string; value: string } | undefined {
   return value ? { label, value } : undefined;
+}
+
+export function parseDomestiqueResults(html: string, date: Date): SportsEvent[] {
+  const eventData = extractJsonVariables(html, "event_data")
+    .find((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value));
+  const stages = [
+    ...extractJsonVariables(html, "matchcenter").flatMap((data) => isRecord(data) && Array.isArray(data.stages) ? data.stages : []),
+    ...extractJsonVariables(html, "stages").flatMap((data) => Array.isArray(data) ? data.map((stage) => withRace(stage, eventData)) : []),
+  ];
+  const dateKey = date.toISOString().slice(0, 10);
+
+  return stages
+    .map((stage, index) => resultFromStage(stage, index))
+    .filter((event): event is SportsEvent => Boolean(event))
+    .filter((event) => event.startTime?.startsWith(dateKey));
+}
+
+function resultFromStage(stage: unknown, index: number): SportsEvent | undefined {
+  if (!stage || typeof stage !== "object") {
+    return undefined;
+  }
+
+  const object = stage as Record<string, unknown>;
+  const winner = winnerFromStage(object);
+  if (!winner) {
+    return undefined;
+  }
+
+  const race = object.race && typeof object.race === "object" ? object.race as Record<string, unknown> : undefined;
+  const raceTitle = stringFrom(race?.title);
+  const stageTitle = stringFrom(object.title);
+  const name = [raceTitle, stageTitle && stageTitle !== "Race" ? stageTitle : undefined].filter(Boolean).join(" ");
+  const stageDate = Array.isArray(object.date) ? stringFrom(object.date[0]) : stringFrom(object.date);
+  const location = Array.isArray(object.location) ? object.location.map(stringFrom).filter(Boolean) : [];
+  const startTown = location.at(0);
+  const endTown = location.at(1) ?? startTown;
+  const courseType = stringFrom(object.type);
+  const category = stringFrom(race?.category);
+  const gender = race?.gender && typeof race.gender === "object" ? stringFrom((race.gender as Record<string, unknown>).full) : undefined;
+  const sourceUrl = stringFrom(object.url) ?? RESULTS_BASE_URL;
+
+  return {
+    id: `cycling:result:${stageDate ?? "unknown"}:${index}:${name}`,
+    sport: "cycling",
+    name,
+    source: RESULTS_SOURCE,
+    sourceUrl,
+    status: "final",
+    startTime: stageDate,
+    competition: [category, gender].filter(Boolean).join(" ") || undefined,
+    resultSummary: `${winner} won`,
+    detail: [courseType, startTown && endTown ? `${startTown} to ${endTown}` : undefined].filter(Boolean).join(" · ") || undefined,
+    facts: [
+      fact("Winner", winner),
+      fact("Course", courseType),
+      fact("Start town", startTown),
+      fact("End town", endTown),
+      fact("Category", category),
+    ].filter((item): item is { label: string; value: string } => Boolean(item)),
+  };
+}
+
+function winnerFromStage(stage: Record<string, unknown>): string | undefined {
+  const ranking = Array.isArray(stage.riderRanking) ? stage.riderRanking : [];
+  const winner = ranking.find((entry) => entry && typeof entry === "object" && (entry as Record<string, unknown>).ranking === 1);
+  return winner && typeof winner === "object" ? stringFrom((winner as Record<string, unknown>).title) : undefined;
+}
+
+function extractJsonVariables(html: string, name: string): unknown[] {
+  const marker = `var ${name} = `;
+  const values: unknown[] = [];
+  let searchFrom = 0;
+
+  while (true) {
+    const start = html.indexOf(marker, searchFrom);
+    if (start === -1) {
+      return values;
+    }
+
+    const jsonStart = start + marker.length;
+    const jsonEnd = findJsonEnd(html, jsonStart);
+    if (jsonEnd === undefined) {
+      return values;
+    }
+
+    try {
+      values.push(JSON.parse(html.slice(jsonStart, jsonEnd)));
+    } catch {
+      // Ignore unrelated or malformed variable blocks.
+    }
+
+    searchFrom = jsonEnd;
+  }
+}
+
+function findJsonEnd(html: string, start: number): number | undefined {
+  const opener = html[start];
+  const closer = opener === "{" ? "}" : opener === "[" ? "]" : undefined;
+  if (!closer) {
+    return undefined;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < html.length; index += 1) {
+    const char = html[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === opener) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closer) {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function withRace(stage: unknown, race: Record<string, unknown> | undefined): unknown {
+  if (!isRecord(stage) || stage.race || !race) {
+    return stage;
+  }
+
+  return { ...stage, race };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringFrom(value: unknown): string | undefined {
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : undefined;
+}
+
+function resultsUrlForYear(date: Date): string {
+  return new URL(`${date.getUTCFullYear()}/`, RESULTS_BASE_URL).toString();
+}
+
+function domestiqueStageUrl(name: string, date: Date): string | undefined {
+  const match = name.match(/^(?<race>.*?)\s+—\s+Stage\s+(?<stage>\d+)/);
+  if (!match?.groups?.race || !match.groups.stage) {
+    return undefined;
+  }
+
+  const raceSlug = slugifyRaceName(match.groups.race);
+  if (!raceSlug) {
+    return undefined;
+  }
+
+  return new URL(`/en/cycling-races/${raceSlug}/${date.getUTCFullYear()}/stage-${match.groups.stage}/`, "https://www.domestiquecycling.com").toString();
+}
+
+function slugifyRaceName(name: string): string {
+  return decodeHtml(name)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’]/g, "")
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function uniqueEvents(events: SportsEvent[]): SportsEvent[] {
+  return [...new Map(events.map((event) => [event.sourceUrl, event])).values()]
+    .sort((left, right) => (left.startTime ?? "").localeCompare(right.startTime ?? "") || left.name.localeCompare(right.name));
 }

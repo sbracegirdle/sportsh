@@ -19,3 +19,7 @@ test("formatEventTime includes date when event is on a different local date", ()
     /Fri 5 Jun/,
   );
 });
+
+test("formatEventTime hides date-only values", () => {
+  assert.equal(formatEventTime("2026-06-04", new Date("2026-06-04T00:00:00.000Z")), undefined);
+});

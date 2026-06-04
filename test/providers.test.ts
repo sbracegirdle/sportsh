@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseEspnCricinfoToday } from "../src/providers/cricket/espnCricinfo.ts";
-import { parseCourseDuJourToday } from "../src/providers/cycling/courseDuJour.ts";
+import { parseCourseDuJourToday, parseDomestiqueResults } from "../src/providers/cycling/courseDuJour.ts";
 
 test("parseEspnCricinfoToday extracts cricket events from embedded JSON", async () => {
   const html = await readFile(new URL("./fixtures/espncricinfo-live.html", import.meta.url), "utf8");
@@ -38,4 +38,26 @@ test("parseCourseDuJourToday extracts race rows from the daily schedule", async 
     { label: "End town", value: "Dison" },
     { label: "Coverage", value: "Eurosport / HBO Max (EUR)" },
   ]);
+});
+
+test("parseDomestiqueResults extracts cycling winners from the results data", async () => {
+  const html = await readFile(new URL("./fixtures/domestique-results.html", import.meta.url), "utf8");
+  const events = parseDomestiqueResults(html, new Date("2026-06-03T00:00:00.000Z"));
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0]?.source, "Domestique");
+  assert.equal(events[0]?.name, "Tour de Wallonie Stage 3");
+  assert.equal(events[0]?.resultSummary, "Laurence Pithie won");
+  assert.equal(events[0]?.competition, "2.Pro Men");
+  assert.equal(events[0]?.detail, "flat · Habay to Vaux-sur-Sûre");
+  assert.deepEqual(events[0]?.facts, [
+    { label: "Winner", value: "Laurence Pithie" },
+    { label: "Course", value: "flat" },
+    { label: "Start town", value: "Habay" },
+    { label: "End town", value: "Vaux-sur-Sûre" },
+    { label: "Category", value: "2.Pro" },
+  ]);
+  assert.equal(events[1]?.name, "Giro d'Italia Women Stage 5");
+  assert.equal(events[1]?.resultSummary, "Demi Vollering won");
+  assert.equal(events[1]?.detail, "mountains · Longarone to Santo Stefano di Cadore");
 });
