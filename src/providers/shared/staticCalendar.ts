@@ -1,4 +1,4 @@
-import type { Sport, SportsEvent, SportsProvider } from "../../domain/events.ts";
+import type { EventSession, Sport, SportsEvent, SportsProvider } from "../../domain/events.ts";
 import { fetchCachedText } from "./cache.ts";
 
 export type StaticCalendarEvent = {
@@ -11,6 +11,7 @@ export type StaticCalendarEvent = {
   competition?: string;
   detail?: string;
   facts?: Array<{ label: string; value: string }>;
+  sessions?: EventSession[];
 };
 
 export type StaticCalendarOptions = {
@@ -72,6 +73,7 @@ function toSportsEvent(
     startTime: event.startDate,
     competition: event.competition,
     detail: detail || undefined,
+    sessions: event.sessions,
     facts: [
       fact("Start", event.startDate),
       event.endDate && event.endDate !== event.startDate ? fact("End", event.endDate) : undefined,

@@ -1,3 +1,4 @@
+import type { EventSession } from "../../domain/events.ts";
 import type { SportsProvider } from "../../domain/events.ts";
 import { createStaticCalendarProvider } from "../shared/staticCalendar.ts";
 
@@ -38,5 +39,38 @@ function event(name: string, startDate: string, endDate: string, venue: string, 
       { label: "Venue", value: venue },
       sprint ? { label: "Format", value: "Sprint weekend" } : undefined,
     ].filter((item): item is { label: string; value: string } => Boolean(item)),
+    sessions: weekendSessions(startDate, endDate, sprint),
   };
+}
+
+// A standard F1 weekend runs Fri–Sun; only the session days are known here, not
+// the exact local start times. Saturday is taken as the day before the race.
+function weekendSessions(startDate: string, endDate: string, sprint: boolean): EventSession[] {
+  const friday = startDate;
+  const sunday = endDate;
+  const saturday = addDays(endDate, -1);
+
+  const names: Array<[string, string]> = sprint
+    ? [
+      ["Practice 1", friday],
+      ["Sprint Qualifying", friday],
+      ["Sprint", saturday],
+      ["Qualifying", saturday],
+      ["Race", sunday],
+    ]
+    : [
+      ["Practice 1", friday],
+      ["Practice 2", friday],
+      ["Practice 3", saturday],
+      ["Qualifying", saturday],
+      ["Race", sunday],
+    ];
+
+  return names.map(([name, day]) => ({ name, startTime: day }));
+}
+
+function addDays(date: string, days: number): string {
+  const next = new Date(`${date}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
 }

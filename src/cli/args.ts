@@ -1,5 +1,5 @@
 export type CliArgs = {
-  command: "events" | "today" | "results" | "startlist";
+  command?: "events" | "today" | "results" | "startlist";
   date: Date;
   event?: string;
   sports: string[];
@@ -73,7 +73,7 @@ Options:
 
 function commandFromArg(arg: string | undefined): CliArgs["command"] {
   if (!arg) {
-    return "today";
+    return undefined;
   }
 
   if (arg === "events" || arg === "today" || arg === "results" || arg === "startlist") {

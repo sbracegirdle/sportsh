@@ -1,36 +1,73 @@
 #!/usr/bin/env node
 import React from "react";
 import { render } from "ink";
-import { getTodayEvents, listEvents, listResults } from "./core/today.ts";
+import type { SportsEvent } from "./domain/events.ts";
+import { listEvents, listResults } from "./core/today.ts";
 import { createDefaultProviders } from "./providers/index.ts";
 import { App } from "./cli/App.ts";
+import { InteractiveApp } from "./cli/InteractiveApp.ts";
+import type { Command } from "./cli/components.ts";
 import { parseArgs } from "./cli/args.ts";
 
 const args = parseArgs(process.argv.slice(2));
 
 try {
   const providers = createDefaultProviders();
-  const options = {
-    date: args.date,
-    sports: args.sports.length > 0 ? args.sports : undefined,
-    fresh: args.fresh,
-  };
-  const events = args.command === "results"
-    ? await listResults(providers, options)
-    : args.command === "events" || args.command === "startlist"
-      ? await listEvents(providers, options)
-      : await getTodayEvents(providers, options);
-  const filteredEvents = args.event
-    ? events.filter((event) => event.name.toLowerCase().includes(args.event?.toLowerCase() ?? ""))
-    : events;
 
-  render(React.createElement(App, {
-    command: args.command,
-    date: args.date,
-    events: filteredEvents,
-    eventFilter: args.event,
-    selectedSports: args.sports,
-  }));
+  const load = async (
+    command: Command,
+    sports?: readonly string[],
+    date: Date = args.date,
+  ): Promise<SportsEvent[]> => {
+    const options = {
+      date,
+      sports: sports ?? (args.sports.length > 0 ? args.sports : undefined),
+      fresh: args.fresh,
+    };
+    const events = command === "results"
+      ? await listResults(providers, options)
+      : await listEvents(providers, options);
+    return args.event
+      ? events.filter((event) => event.name.toLowerCase().includes(args.event?.toLowerCase() ?? ""))
+      : events;
+  };
+
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
+  if (interactive) {
+    const sports = args.sports.length > 0 ? args.sports : undefined;
+    const initialHistory = args.command
+      ? [
+        { kind: "menu" as const, cursor: 0 },
+        {
+          kind: "list" as const,
+          command: args.command,
+          sports,
+          date: args.date,
+          cursor: 0,
+          query: "",
+          inputMode: false,
+        },
+      ]
+      : [{ kind: "menu" as const, cursor: 0 }];
+
+    render(React.createElement(InteractiveApp, {
+      initialHistory,
+      load,
+      defaultSports: args.sports,
+    }));
+  } else {
+    // Piped / non-TTY: keep the original one-shot render.
+    const command = args.command ?? "today";
+    const events = await load(command);
+    render(React.createElement(App, {
+      command,
+      date: args.date,
+      events,
+      eventFilter: args.event,
+      selectedSports: args.sports,
+    }));
+  }
 } catch (error) {
   if (error instanceof AggregateError) {
     console.error(error.message);

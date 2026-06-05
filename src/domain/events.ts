@@ -17,6 +17,16 @@ export type SportsEvent = {
   resultSummary?: string;
   detail?: string;
   facts?: EventFact[];
+  /** Ordered schedule for the event. Session-based sports (cricket, F1) list each session. */
+  sessions?: EventSession[];
+};
+
+export type EventSession = {
+  name: string;
+  /** ISO datetime, or a date-only `YYYY-MM-DD` when only the day is known. */
+  startTime?: string;
+  status?: EventStatus;
+  detail?: string;
 };
 
 export type ProviderContext = {
