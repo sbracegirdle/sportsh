@@ -4,6 +4,7 @@ import test from "node:test";
 import { parseEspnCricinfoToday } from "../src/providers/cricket/espnCricinfo.ts";
 import { parseCourseDuJourToday, parseDomestiqueResults } from "../src/providers/cycling/courseDuJour.ts";
 import { parseFootyWireFixture } from "../src/providers/afl/footyWire.ts";
+import { parseDriverList, parseSeasonSessions, parseStandingsGrid } from "../src/providers/motorsport/f1.ts";
 
 test("parseEspnCricinfoToday extracts cricket events from embedded JSON", async () => {
   const html = await readFile(new URL("./fixtures/espncricinfo-live.html", import.meta.url), "utf8");
@@ -82,5 +83,65 @@ test("parseFootyWireFixture extracts AFL fixtures and results", async () => {
   assert.deepEqual(events[1]?.startList, [
     { name: "Carlton", role: "Home" },
     { name: "Richmond", role: "Away" },
+  ]);
+});
+
+test("parseStandingsGrid builds the F1 field with teams in championship order", () => {
+  const json = JSON.stringify({
+    MRData: {
+      StandingsTable: {
+        StandingsLists: [{
+          DriverStandings: [
+            { position: "1", Driver: { givenName: "Andrea Kimi", familyName: "Antonelli", nationality: "Italian" }, Constructors: [{ name: "Mercedes" }] },
+            { position: "2", Driver: { givenName: "Charles", familyName: "Leclerc", nationality: "Monegasque" }, Constructors: [{ name: "Ferrari" }] },
+          ],
+        }],
+      },
+    },
+  });
+
+  const grid = parseStandingsGrid(json);
+  assert.deepEqual(grid, [
+    { name: "Andrea Kimi Antonelli", nationality: "Italian", team: "Mercedes" },
+    { name: "Charles Leclerc", nationality: "Monegasque", team: "Ferrari" },
+  ]);
+});
+
+test("parseDriverList falls back to drivers without team data", () => {
+  const json = JSON.stringify({
+    MRData: { DriverTable: { Drivers: [{ givenName: "Max", familyName: "Verstappen", nationality: "Dutch" }] } },
+  });
+
+  assert.deepEqual(parseDriverList(json), [{ name: "Max Verstappen", nationality: "Dutch" }]);
+});
+
+test("parseStandingsGrid returns nothing for malformed or empty input", () => {
+  assert.deepEqual(parseStandingsGrid("not json"), []);
+  assert.deepEqual(parseStandingsGrid(JSON.stringify({ MRData: { StandingsTable: { StandingsLists: [] } } })), []);
+});
+
+test("parseSeasonSessions builds timed, ordered sessions per race", () => {
+  const json = JSON.stringify({
+    MRData: {
+      RaceTable: {
+        Races: [{
+          raceName: "Miami Grand Prix",
+          date: "2026-05-03",
+          time: "20:00:00Z",
+          FirstPractice: { date: "2026-05-01", time: "16:00:00Z" },
+          SprintQualifying: { date: "2026-05-01", time: "20:30:00Z" },
+          Sprint: { date: "2026-05-02", time: "16:00:00Z" },
+          Qualifying: { date: "2026-05-02", time: "20:00:00Z" },
+        }],
+      },
+    },
+  });
+
+  assert.deepEqual(parseSeasonSessions(json).get("Miami Grand Prix"), [
+    { name: "Practice 1", startTime: "2026-05-01T16:00:00Z" },
+    { name: "Sprint Qualifying", startTime: "2026-05-01T20:30:00Z" },
+    { name: "Sprint", startTime: "2026-05-02T16:00:00Z" },
+    { name: "Qualifying", startTime: "2026-05-02T20:00:00Z" },
+    { name: "Race", startTime: "2026-05-03T20:00:00Z" },
   ]);
 });

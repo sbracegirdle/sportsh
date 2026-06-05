@@ -1,11 +1,18 @@
-import type { EventSession } from "../../domain/events.ts";
-import type { SportsProvider } from "../../domain/events.ts";
+import type { EventParticipant, EventSession, SportsEvent, SportsProvider } from "../../domain/events.ts";
+import { fetchCachedText } from "../shared/cache.ts";
 import { createStaticCalendarProvider } from "../shared/staticCalendar.ts";
 
 const SOURCE_URL = "https://www.formula1.com/en/latest/article/formula-1-reveals-calendar-for-2026-season.YctbMZWqBvrgyddrnauo8";
+const ENTRY_LIST_URL = "https://www.formula1.com/en/results/2026/drivers";
+// Jolpica is the maintained successor to the Ergast F1 API.
+const STANDINGS_API = "https://api.jolpi.ca/ergast/f1/2026/driverstandings.json";
+const DRIVERS_API = "https://api.jolpi.ca/ergast/f1/2026/drivers.json";
+const SCHEDULE_API = "https://api.jolpi.ca/ergast/f1/2026.json";
+const GRID_TTL_MS = 6 * 60 * 60 * 1000;
+const SCHEDULE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function createF1Provider(): SportsProvider {
-  return createStaticCalendarProvider({
+  const calendar = createStaticCalendarProvider({
     sport: "f1",
     source: "Formula 1",
     sourceUrl: SOURCE_URL,
@@ -26,6 +33,161 @@ export function createF1Provider(): SportsProvider {
       event("Dutch Grand Prix", "2026-08-21", "2026-08-23", "Zandvoort", true),
     ],
   });
+
+  return {
+    sport: "f1",
+    async listEvents(context) {
+      return attachLiveData(await calendar.listEvents(context), context.fresh);
+    },
+    async listResults(context) {
+      return calendar.listResults(context);
+    },
+    async nextEvent(context) {
+      return attachLiveData(await calendar.nextEvent!(context), context.fresh);
+    },
+  };
+}
+
+/** Adds the season entry list and real session times (when available) to each grand prix. */
+async function attachLiveData(events: SportsEvent[], fresh: boolean): Promise<SportsEvent[]> {
+  if (events.length === 0) {
+    return events;
+  }
+
+  const [grid, schedule] = await Promise.all([fetchGrid(fresh), fetchSchedule(fresh)]);
+
+  return events.map((event) => ({
+    ...event,
+    startList: grid.length > 0 ? grid : event.startList,
+    startListUrl: grid.length > 0 ? ENTRY_LIST_URL : event.startListUrl,
+    // Prefer real timed sessions from the API; fall back to the day-only weekend outline.
+    sessions: schedule.get(event.name) ?? event.sessions,
+  }));
+}
+
+async function fetchSchedule(fresh: boolean): Promise<Map<string, EventSession[]>> {
+  try {
+    return parseSeasonSessions(await fetchCachedText(SCHEDULE_API, { fresh, ttlMs: SCHEDULE_TTL_MS }));
+  } catch {
+    return new Map();
+  }
+}
+
+async function fetchGrid(fresh: boolean): Promise<EventParticipant[]> {
+  try {
+    const standings = parseStandingsGrid(await fetchCachedText(STANDINGS_API, { fresh, ttlMs: GRID_TTL_MS }));
+    if (standings.length > 0) {
+      return standings;
+    }
+  } catch {
+    // Fall through to the plain driver list.
+  }
+
+  try {
+    return parseDriverList(await fetchCachedText(DRIVERS_API, { fresh, ttlMs: GRID_TTL_MS }));
+  } catch {
+    return [];
+  }
+}
+
+/** Parses the Jolpica/Ergast driver-standings response into a field with teams, in championship order. */
+export function parseStandingsGrid(json: string): EventParticipant[] {
+  const data = safeParse(json);
+  const lists = data?.MRData?.StandingsTable?.StandingsLists;
+  const standings = Array.isArray(lists) && isRecord(lists[0]) && Array.isArray(lists[0].DriverStandings)
+    ? lists[0].DriverStandings
+    : [];
+
+  return standings
+    .map((entry: unknown) => {
+      if (!isRecord(entry) || !isRecord(entry.Driver)) {
+        return undefined;
+      }
+      const constructors = Array.isArray(entry.Constructors) ? entry.Constructors : [];
+      const team = isRecord(constructors[0]) ? stringOf(constructors[0].name) : undefined;
+      return participant(entry.Driver, team);
+    })
+    .filter((value: EventParticipant | undefined): value is EventParticipant => Boolean(value));
+}
+
+/** Parses the Jolpica/Ergast driver-list response (no team data). */
+export function parseDriverList(json: string): EventParticipant[] {
+  const data = safeParse(json);
+  const drivers = data?.MRData?.DriverTable?.Drivers;
+
+  return (Array.isArray(drivers) ? drivers : [])
+    .map((driver: unknown) => (isRecord(driver) ? participant(driver, undefined) : undefined))
+    .filter((value: EventParticipant | undefined): value is EventParticipant => Boolean(value));
+}
+
+/** Parses the Jolpica/Ergast season schedule into per-race timed sessions, keyed by race name. */
+export function parseSeasonSessions(json: string): Map<string, EventSession[]> {
+  const data = safeParse(json);
+  const races = data?.MRData?.RaceTable?.Races;
+  const map = new Map<string, EventSession[]>();
+  if (!Array.isArray(races)) {
+    return map;
+  }
+
+  for (const race of races) {
+    if (!isRecord(race)) {
+      continue;
+    }
+    const name = stringOf(race.raceName);
+    if (!name) {
+      continue;
+    }
+
+    const sessions: EventSession[] = [];
+    const add = (key: string, label: string) => {
+      const session = race[key];
+      if (isRecord(session)) {
+        const when = sessionTime(stringOf(session.date), stringOf(session.time));
+        if (when) {
+          sessions.push({ name: label, startTime: when });
+        }
+      }
+    };
+
+    add("FirstPractice", "Practice 1");
+    add("SecondPractice", "Practice 2");
+    add("ThirdPractice", "Practice 3");
+    add("SprintQualifying", "Sprint Qualifying");
+    add("SprintShootout", "Sprint Qualifying");
+    add("Sprint", "Sprint");
+    add("Qualifying", "Qualifying");
+
+    const raceWhen = sessionTime(stringOf(race.date), stringOf(race.time));
+    if (raceWhen) {
+      sessions.push({ name: "Race", startTime: raceWhen });
+    }
+
+    sessions.sort((left, right) => (left.startTime ?? "").localeCompare(right.startTime ?? ""));
+    if (sessions.length > 0) {
+      map.set(name, sessions);
+    }
+  }
+
+  return map;
+}
+
+function sessionTime(date: string | undefined, time: string | undefined): string | undefined {
+  if (!date) {
+    return undefined;
+  }
+  return time ? `${date}T${time}` : date;
+}
+
+function participant(driver: Record<string, unknown>, team: string | undefined): EventParticipant | undefined {
+  const name = [stringOf(driver.givenName), stringOf(driver.familyName)].filter(Boolean).join(" ").trim();
+  if (!name) {
+    return undefined;
+  }
+  return removeUndefined({
+    name,
+    nationality: stringOf(driver.nationality),
+    team,
+  });
 }
 
 function event(name: string, startDate: string, endDate: string, venue: string, sprint = false) {
@@ -35,6 +197,7 @@ function event(name: string, startDate: string, endDate: string, venue: string, 
     endDate,
     competition: "Formula 1",
     detail: sprint ? `${venue} · Sprint weekend` : venue,
+    startListUrl: ENTRY_LIST_URL,
     facts: [
       { label: "Venue", value: venue },
       sprint ? { label: "Format", value: "Sprint weekend" } : undefined,
@@ -73,4 +236,24 @@ function addDays(date: string, days: number): string {
   const next = new Date(`${date}T00:00:00.000Z`);
   next.setUTCDate(next.getUTCDate() + days);
   return next.toISOString().slice(0, 10);
+}
+
+function safeParse(json: string): any {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringOf(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function removeUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
 }

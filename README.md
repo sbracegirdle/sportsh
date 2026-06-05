@@ -16,7 +16,7 @@ sportsh startlist [--date YYYY-MM-DD] [--sport SPORT] [--event EVENT]
 
 When run in a terminal, `sportsh` is interactive. Running it with no command opens a menu (today's schedule, today's results, or filter by sport); running it with a command jumps straight to that list. The list scrolls to keep the highlighted event on screen, showing `↑ N more` / `↓ N more` when entries are off-screen.
 
-Pressing `↵` on an event opens its **details page**, which has a *Schedule* section (sessions for session-based sports such as F1, otherwise the start time / date range), an *Info* section, and the *Field* (start list). The schedule tags each entry as `● LIVE`, `◆ today`, or `✓ done`.
+Pressing `↵` on an event opens its **details page**, which has a *Schedule* section (sessions for session-based sports such as F1, otherwise the start time / date range), an *Info* section, and the *Field* (start list). The schedule shows local session times when known (e.g. F1 practice/qualifying/race) and tags each entry as `● LIVE`, `◆ today`, or `✓ done`. Competitor nationalities are shown as flag emoji.
 
 - `↑`/`↓` (or `k`/`j`) — move the selection (or scroll the start list)
 - `PgUp`/`PgDn` — page through the current view by a screenful

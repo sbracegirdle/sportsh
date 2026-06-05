@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { EventParticipant, Sport, SportsEvent } from "../domain/events.ts";
 import { formatEventTime } from "./format.ts";
+import { nationalityFlag } from "./flags.ts";
 
 const h = React.createElement;
 
@@ -132,7 +133,7 @@ export function ParticipantRow({
       { wrap: "truncate" },
       h(Text, { color: "gray" }, `${String(position).padStart(3, " ")}. `),
       h(Text, { color: "white" }, participant.name),
-      participant.nationality ? h(Text, { color: "gray" }, ` (${participant.nationality})`) : undefined,
+      nationalityText(participant.nationality),
       participant.team ? h(Text, { color: "gray" }, ` · ${participant.team}`) : undefined,
       participant.role ? h(Text, { color: "gray" }, ` · ${participant.role}`) : undefined,
     ),
@@ -237,12 +238,23 @@ function StartList({
       { key: `${participant.name}:${index}` },
       index > 0 ? h(Text, { color: "gray" }, "  /  ") : undefined,
       h(Text, { color: "white" }, participant.name),
-      participant.nationality ? h(Text, { color: "gray" }, ` (${participant.nationality})`) : undefined,
+      nationalityText(participant.nationality),
       participant.team ? h(Text, { color: "gray" }, ` · ${participant.team}`) : undefined,
       participant.role ? h(Text, { color: "gray" }, ` · ${participant.role}`) : undefined,
     )),
     hiddenCount > 0 ? h(Text, { color: "gray" }, `  /  +${hiddenCount} more`) : undefined,
   );
+}
+
+/** Renders a nationality as a flag emoji when resolvable, otherwise the raw text in parentheses. */
+function nationalityText(nationality: string | undefined): React.ReactNode {
+  if (!nationality) {
+    return undefined;
+  }
+  const flag = nationalityFlag(nationality);
+  return flag
+    ? h(Text, undefined, ` ${flag}`)
+    : h(Text, { color: "gray" }, ` (${nationality})`);
 }
 
 function StartListPanel({
