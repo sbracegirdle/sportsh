@@ -8,11 +8,12 @@ const DEFAULT_TTL_MS = 15 * 60 * 1000;
 export type FetchTextOptions = {
   ttlMs?: number;
   fresh?: boolean;
+  headers?: Record<string, string>;
 };
 
 export async function fetchCachedText(url: string, options: FetchTextOptions = {}): Promise<string> {
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
-  const cachePath = cacheFilePath(url);
+  const cachePath = cacheFilePath(url, options.headers);
 
   if (!options.fresh && await isFresh(cachePath, ttlMs)) {
     return readFile(cachePath, "utf8");
@@ -31,6 +32,7 @@ export async function fetchCachedText(url: string, options: FetchTextOptions = {
         "sec-fetch-site": "none",
         "upgrade-insecure-requests": "1",
         "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 sportsh/0.1",
+        ...options.headers,
       },
     });
   } catch (error) {
@@ -60,8 +62,9 @@ function cacheRoot(): string {
     ?? (process.env.XDG_CACHE_HOME ? join(process.env.XDG_CACHE_HOME, "sportsh") : join(homedir(), ".cache", "sportsh"));
 }
 
-function cacheFilePath(url: string): string {
-  const digest = createHash("sha256").update(url).digest("hex");
+function cacheFilePath(url: string, headers?: Record<string, string>): string {
+  const key = headers && Object.keys(headers).length > 0 ? `${url}|${JSON.stringify(headers)}` : url;
+  const digest = createHash("sha256").update(key).digest("hex");
   return join(cacheRoot(), `${digest}.html`);
 }
 

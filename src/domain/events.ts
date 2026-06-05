@@ -19,6 +19,15 @@ export type SportsEvent = {
   facts?: EventFact[];
   /** Ordered schedule for the event. Session-based sports (cricket, F1) list each session. */
   sessions?: EventSession[];
+  /** Classifications/standings for the event, e.g. cycling GC, points, mountains. */
+  standings?: EventStanding[];
+};
+
+export type EventStanding = {
+  title: string;
+  entries: EventParticipant[];
+  /** Total number of ranked competitors when `entries` is a truncated top-N. */
+  total?: number;
 };
 
 export type EventSession = {

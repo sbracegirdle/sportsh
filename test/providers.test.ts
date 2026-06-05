@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseEspnCricinfoToday } from "../src/providers/cricket/espnCricinfo.ts";
-import { parseCourseDuJourToday, parseDomestiqueResults } from "../src/providers/cycling/courseDuJour.ts";
+import { parseCourseDuJourToday, parseDomestiqueResults, parseDomestiqueStartlist } from "../src/providers/cycling/courseDuJour.ts";
 import { parseFootyWireFixture } from "../src/providers/afl/footyWire.ts";
 import { parseDriverList, parseSeasonSessions, parseStandingsGrid } from "../src/providers/motorsport/f1.ts";
 
@@ -144,4 +144,38 @@ test("parseSeasonSessions builds timed, ordered sessions per race", () => {
     { name: "Qualifying", startTime: "2026-05-02T20:00:00Z" },
     { name: "Race", startTime: "2026-05-03T20:00:00Z" },
   ]);
+});
+
+test("parseDomestiqueStartlist extracts the field and classifications from edition_data", () => {
+  const edition = {
+    startList: [
+      {
+        name: "Team SD Worx-Protime",
+        riders: [
+          { title: "Anna van der Breggen", country: { short: "NL" }, startNumber: 1 },
+          { firstName: "Lorena", lastName: "Wiebes", country: { short: "NL" }, startNumber: 2 },
+        ],
+      },
+    ],
+    gcRanking: [
+      { title: "Anna van der Breggen", country: { short: "NL" }, team: { name: "Team SD Worx-Protime" }, readableTime: "19:49:15" },
+      { title: "Demi Vollering", country: { short: "NL" }, team: { name: "FDJ United-SUEZ" }, readableTime: "+ 01.00" },
+    ],
+    pointsRanking: [
+      { title: "Elisa Balsamo", country: { short: "IT" }, team: { name: "Lidl-Trek" }, points: 152 },
+    ],
+  };
+  const html = `<html><script>var edition_data = ${JSON.stringify(edition)};</script></html>`;
+
+  const { startList, standings } = parseDomestiqueStartlist(html);
+  assert.deepEqual(startList, [
+    { name: "Anna van der Breggen", nationality: "NL", team: "Team SD Worx-Protime", role: "#1" },
+    { name: "Lorena Wiebes", nationality: "NL", team: "Team SD Worx-Protime", role: "#2" },
+  ]);
+  assert.equal(standings.length, 2);
+  assert.equal(standings[0]?.title, "General classification");
+  assert.equal(standings[0]?.total, 2);
+  assert.deepEqual(standings[0]?.entries[0], { name: "Anna van der Breggen", nationality: "NL", team: "Team SD Worx-Protime", role: "19:49:15" });
+  assert.equal(standings[1]?.title, "Points");
+  assert.equal(standings[1]?.entries[0]?.role, "152 pts");
 });

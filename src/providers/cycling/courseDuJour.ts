@@ -1,4 +1,4 @@
-import type { SportsEvent, SportsProvider } from "../../domain/events.ts";
+import type { EventParticipant, EventStanding, SportsEvent, SportsProvider } from "../../domain/events.ts";
 import { fetchCachedText } from "../shared/cache.ts";
 import { decodeHtml, stripTags } from "../shared/html.ts";
 
@@ -6,6 +6,9 @@ const SOURCE = "Course du Jour";
 const HOME_URL = "https://coursedujour.com/";
 const RESULTS_SOURCE = "Domestique";
 const RESULTS_BASE_URL = "https://www.domestiquecycling.com/en/cycling-results/";
+const DOMESTIQUE_ORIGIN = "https://www.domestiquecycling.com";
+const STARTLIST_TTL_MS = 6 * 60 * 60 * 1000;
+const STANDING_LIMIT = 12;
 
 export function createCourseDuJourProvider(): SportsProvider {
   return {
@@ -16,7 +19,8 @@ export function createCourseDuJourProvider(): SportsProvider {
         ttlMs: 15 * 60 * 1000,
       });
 
-      return parseCourseDuJourToday(html, context.date);
+      const events = parseCourseDuJourToday(html, context.date);
+      return Promise.all(events.map((event) => attachStartlist(event, context.date, context.fresh)));
     },
     async listResults(context) {
       const resultsHtml = await fetchCachedText(resultsUrlForYear(context.date), {
@@ -161,6 +165,142 @@ function townsFromLocation(location: string | undefined): { startTown?: string; 
 
 function fact(label: string, value: string | undefined): { label: string; value: string } | undefined {
   return value ? { label, value } : undefined;
+}
+
+/** Enriches an upcoming race with its Domestique start list and classifications, when found. */
+async function attachStartlist(event: SportsEvent, date: Date, fresh: boolean): Promise<SportsEvent> {
+  for (const url of startlistUrlCandidates(event.name, date.getUTCFullYear())) {
+    try {
+      const html = await fetchCachedText(url, {
+        fresh,
+        ttlMs: STARTLIST_TTL_MS,
+        headers: { "x-requested-with": "XMLHttpRequest" },
+      });
+      const { startList, standings } = parseDomestiqueStartlist(html);
+      if (startList.length > 0 || standings.length > 0) {
+        return {
+          ...event,
+          startList: startList.length > 0 ? startList : event.startList,
+          startListUrl: startList.length > 0 ? url : event.startListUrl,
+          standings: standings.length > 0 ? standings : event.standings,
+        };
+      }
+    } catch {
+      // Try the next slug candidate, then fall back to the unenriched event.
+    }
+  }
+
+  return event;
+}
+
+/** Domestique race slugs drop sponsor prefixes, so try the full name then the name minus its first token. */
+function startlistUrlCandidates(name: string, year: number): string[] {
+  const raceName = name.replace(/\s+[—–-]\s+(stage\s+\d+|prologue|race).*$/i, "").trim();
+  const base = slugifyRaceName(raceName);
+  if (!base) {
+    return [];
+  }
+
+  const slugs = new Set<string>([base]);
+  const firstHyphen = base.indexOf("-");
+  if (firstHyphen > 0) {
+    slugs.add(base.slice(firstHyphen + 1));
+  }
+
+  return [...slugs].map((slug) => `${DOMESTIQUE_ORIGIN}/en/cycling-races/${slug}/${year}/startlist/`);
+}
+
+export function parseDomestiqueStartlist(html: string): { startList: EventParticipant[]; standings: EventStanding[] } {
+  const edition = extractJsonVariables(html, "edition_data").find(isRecord);
+  if (!edition) {
+    return { startList: [], standings: [] };
+  }
+
+  const startList = Array.isArray(edition.startList)
+    ? edition.startList.flatMap((team) => ridersFromTeam(team))
+    : [];
+
+  const standings: EventStanding[] = [];
+  addStanding(standings, "General classification", edition.gcRanking);
+  addStanding(standings, "Points", edition.pointsRanking);
+  addStanding(standings, "Mountains", edition.mountainRanking);
+  addStanding(standings, "Youth", edition.youthRanking);
+
+  return { startList, standings };
+}
+
+function ridersFromTeam(team: unknown): EventParticipant[] {
+  if (!isRecord(team) || !Array.isArray(team.riders)) {
+    return [];
+  }
+
+  const teamName = stringFrom(team.name) ?? stringFrom(team.title);
+  return team.riders
+    .map((rider) => riderToParticipant(rider, teamName))
+    .filter((value): value is EventParticipant => Boolean(value));
+}
+
+function addStanding(standings: EventStanding[], title: string, ranking: unknown): void {
+  if (!Array.isArray(ranking) || ranking.length === 0) {
+    return;
+  }
+
+  const entries = ranking
+    .slice(0, STANDING_LIMIT)
+    .map((entry) => standingEntry(entry))
+    .filter((value): value is EventParticipant => Boolean(value));
+
+  if (entries.length > 0) {
+    standings.push({ title, entries, total: ranking.length });
+  }
+}
+
+function riderToParticipant(rider: unknown, teamName: string | undefined): EventParticipant | undefined {
+  if (!isRecord(rider)) {
+    return undefined;
+  }
+
+  const name = riderName(rider);
+  if (!name) {
+    return undefined;
+  }
+
+  const bib = stringFrom(rider.startNumber);
+  return removeUndefined({
+    name,
+    nationality: isRecord(rider.country) ? stringFrom(rider.country.short) : undefined,
+    team: teamName ?? teamNameFrom(rider.team),
+    role: bib ? `#${bib}` : undefined,
+  });
+}
+
+function standingEntry(entry: unknown): EventParticipant | undefined {
+  if (!isRecord(entry)) {
+    return undefined;
+  }
+
+  const name = riderName(entry);
+  if (!name) {
+    return undefined;
+  }
+
+  const time = stringFrom(entry.readableTime);
+  const points = entry.points !== undefined && entry.points !== null ? `${stringFrom(entry.points)} pts` : undefined;
+  return removeUndefined({
+    name,
+    nationality: isRecord(entry.country) ? stringFrom(entry.country.short) : undefined,
+    team: teamNameFrom(entry.team),
+    role: time ?? points,
+  });
+}
+
+function riderName(rider: Record<string, unknown>): string | undefined {
+  const full = [stringFrom(rider.firstName), stringFrom(rider.lastName)].filter(Boolean).join(" ").trim();
+  return stringFrom(rider.title) ?? (full || undefined);
+}
+
+function teamNameFrom(team: unknown): string | undefined {
+  return isRecord(team) ? stringFrom(team.name) ?? stringFrom(team.title) : undefined;
 }
 
 export function parseDomestiqueResults(html: string, date: Date): SportsEvent[] {

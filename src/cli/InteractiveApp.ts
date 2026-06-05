@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
-import type { EventParticipant, Sport, SportsEvent } from "../domain/events.ts";
+import type { EventParticipant, EventStanding, Sport, SportsEvent } from "../domain/events.ts";
 import { dayTag, formatHeadingDate, formatScheduleWhen } from "./format.ts";
 import {
   COMPACT_CARD_HEIGHT,
@@ -167,10 +167,21 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
     : [];
   const detailSchedule = top.kind === "detail" ? scheduleEntries(top.event, top.date) : [];
   const detailInfo = top.kind === "detail" ? infoLines(top.event) : [];
-  const detailFieldVisible = top.kind === "detail"
-    ? fieldRows(size.rows, detailSchedule.length, detailInfo.length, Boolean(top.inputMode || top.query))
-    : 0;
-  const detailMaxOffset = Math.max(0, detailParticipants.length - detailFieldVisible);
+  const detailStandings = top.kind === "detail" ? top.event.standings ?? [] : [];
+  const detailWidth = Math.max(20, size.cols - 2);
+  const detailRows = top.kind === "detail"
+    ? detailBodyRows({
+      event: top.event,
+      participants: detailParticipants,
+      schedule: detailSchedule,
+      info: detailInfo,
+      standings: detailStandings,
+      query: top.query,
+      width: detailWidth,
+    })
+    : [];
+  const detailBodyVisible = detailVisibleRows(size.rows, top.kind === "detail" && Boolean(top.inputMode || top.query));
+  const detailMaxOffset = Math.max(0, detailRows.length - detailBodyVisible);
 
   useInput((input, key) => {
     const current = top;
@@ -298,9 +309,9 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
     } else if (key.downArrow || input === "j") {
       updateTop<DetailScreen>((c) => ({ offset: Math.min(detailMaxOffset, c.offset + 1) }));
     } else if (key.pageUp) {
-      updateTop<DetailScreen>((c) => ({ offset: Math.max(0, c.offset - detailFieldVisible) }));
+      updateTop<DetailScreen>((c) => ({ offset: Math.max(0, c.offset - detailBodyVisible) }));
     } else if (key.pageDown) {
-      updateTop<DetailScreen>((c) => ({ offset: Math.min(detailMaxOffset, c.offset + detailFieldVisible) }));
+      updateTop<DetailScreen>((c) => ({ offset: Math.min(detailMaxOffset, c.offset + detailBodyVisible) }));
     }
 
     function moveListCursor(delta: number) {
@@ -320,10 +331,9 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
       filteredEvents,
       listCursor,
       totalEvents: allEvents.length,
-      detailParticipants,
-      detailSchedule,
-      detailInfo,
-      detailFieldVisible,
+      detailRows,
+      detailBodyVisible,
+      detailWidth,
       size,
     }),
     h(Footer, { screen: top }),
@@ -338,10 +348,9 @@ function renderScreen({
   filteredEvents,
   listCursor,
   totalEvents,
-  detailParticipants,
-  detailSchedule,
-  detailInfo,
-  detailFieldVisible,
+  detailRows,
+  detailBodyVisible,
+  detailWidth,
   size,
 }: {
   top: Screen;
@@ -351,10 +360,9 @@ function renderScreen({
   filteredEvents: readonly SportsEvent[];
   listCursor: number;
   totalEvents: number;
-  detailParticipants: readonly EventParticipant[];
-  detailSchedule: ScheduleEntry[];
-  detailInfo: string[];
-  detailFieldVisible: number;
+  detailRows: React.ReactNode[];
+  detailBodyVisible: number;
+  detailWidth: number;
   size: { rows: number; cols: number };
 }): React.ReactNode {
   if (top.kind === "menu") {
@@ -366,7 +374,7 @@ function renderScreen({
   }
 
   if (top.kind === "detail") {
-    return renderDetail(top, detailParticipants, detailSchedule, detailInfo, detailFieldVisible, size);
+    return renderDetail(top, detailRows, detailBodyVisible, detailWidth);
   }
 
   return renderList(top, listData, filteredEvents, listCursor, totalEvents, size);
@@ -467,51 +475,11 @@ function renderList(
 
 function renderDetail(
   screen: DetailScreen,
-  participants: readonly EventParticipant[],
-  schedule: ScheduleEntry[],
-  info: string[],
-  fieldVisible: number,
-  size: { rows: number; cols: number },
+  rows: React.ReactNode[],
+  visible: number,
+  width: number,
 ): React.ReactNode {
-  const width = Math.max(20, size.cols - 2);
-  const all = participantsOf(screen.event);
-  const total = all.length;
-  const nameWidth = Math.min(20, schedule.reduce((max, entry) => Math.max(max, entry.name.length), 0));
-
-  const scheduleSection = h(
-    Box,
-    { flexDirection: "column" },
-    h(SectionHeading, { label: "Schedule" }),
-    schedule.length === 0
-      ? h(Text, { color: "gray" }, "  To be confirmed")
-      : schedule.map((entry, index) => h(
-        Box,
-        { key: `${entry.name}:${index}`, width },
-        h(
-          Text,
-          { wrap: "truncate" },
-          h(Text, { color: "white" }, `  ${entry.name.padEnd(nameWidth, " ")}  `),
-          h(Text, { color: "yellow" }, entry.when),
-          entry.tag === "live" ? h(Text, { color: "green", bold: true }, "  ● LIVE") : undefined,
-          entry.tag === "today" ? h(Text, { color: "yellow", bold: true }, "  ◆ today") : undefined,
-          entry.tag === "done" ? h(Text, { color: "gray", dimColor: true }, "  ✓ done") : undefined,
-          entry.detail ? h(Text, { color: "gray" }, `  ${entry.detail}`) : undefined,
-        ),
-      )),
-  );
-
-  const infoSection = info.length > 0
-    ? h(
-      Box,
-      { flexDirection: "column" },
-      h(SectionHeading, { label: "Info" }),
-      ...info.map((line, index) => h(
-        Box,
-        { key: `info:${index}`, width },
-        h(Text, { wrap: "truncate", color: "white" }, `  ${line}`),
-      )),
-    )
-    : undefined;
+  const offset = Math.min(screen.offset, Math.max(0, rows.length - visible));
 
   const filterLine = (screen.inputMode || screen.query)
     ? h(
@@ -523,58 +491,123 @@ function renderDetail(
     )
     : undefined;
 
-  let fieldBody: React.ReactNode;
-  if (total === 0) {
-    fieldBody = h(
-      Text,
-      undefined,
-      h(Text, { color: "gray" }, "  No parsed start list yet. "),
-      screen.event.startListUrl
-        ? h(Text, { color: "cyan" }, compactUrl(screen.event.startListUrl))
-        : h(Text, { color: "gray" }, "No start-list source URL available."),
-    );
-  } else if (participants.length === 0) {
-    fieldBody = h(Text, { color: "yellow" }, "  No entrants match the filter.");
-  } else {
-    const offset = Math.min(screen.offset, Math.max(0, participants.length - fieldVisible));
-    fieldBody = h(
-      Box,
-      { flexDirection: "column" },
-      offset > 0 ? h(Text, { color: "gray", dimColor: true }, `  ↑ ${offset} more`) : undefined,
-      ...participants.slice(offset, offset + fieldVisible).map((participant) => h(ParticipantRow, {
-        key: `${participant.name}:${all.indexOf(participant)}`,
-        participant,
-        position: all.indexOf(participant) + 1,
-        width,
-      })),
-      offset + fieldVisible < participants.length
-        ? h(Text, { color: "gray", dimColor: true }, `  ↓ ${participants.length - offset - fieldVisible} more`)
-        : undefined,
-    );
-  }
-
-  const fieldNote = total === 0
-    ? undefined
-    : screen.query
-      ? `${participants.length} of ${total}`
-      : `${total}`;
-
-  const fieldSection = h(
-    Box,
-    { flexDirection: "column" },
-    h(SectionHeading, { label: "Field", note: fieldNote }),
-    filterLine,
-    fieldBody,
-  );
-
   return h(
     Box,
-    { flexDirection: "column", gap: 1, paddingX: 1 },
+    { flexDirection: "column", paddingX: 1 },
     h(DetailHeader, { event: screen.event, width }),
-    scheduleSection,
-    infoSection,
-    fieldSection,
+    filterLine,
+    offset > 0 ? h(Text, { color: "gray", dimColor: true }, `  ↑ ${offset} more`) : undefined,
+    h(Box, { flexDirection: "column" }, ...rows.slice(offset, offset + visible)),
+    offset + visible < rows.length
+      ? h(Text, { color: "gray", dimColor: true }, `  ↓ ${rows.length - offset - visible} more`)
+      : undefined,
   );
+}
+
+/** Builds the full, scrollable detail body as a flat list of single-line rows. */
+function detailBodyRows({
+  event,
+  participants,
+  schedule,
+  info,
+  standings,
+  query,
+  width,
+}: {
+  event: SportsEvent;
+  participants: readonly EventParticipant[];
+  schedule: ScheduleEntry[];
+  info: string[];
+  standings: readonly EventStanding[];
+  query: string;
+  width: number;
+}): React.ReactNode[] {
+  const rows: React.ReactNode[] = [];
+  const all = participantsOf(event);
+  const total = all.length;
+  const nameWidth = Math.min(20, schedule.reduce((max, entry) => Math.max(max, entry.name.length), 0));
+  const spacer = (key: string) => rows.push(h(Text, { key }, " "));
+
+  // Schedule
+  rows.push(h(SectionHeading, { key: "sched-h", label: "Schedule" }));
+  if (schedule.length === 0) {
+    rows.push(h(Text, { key: "sched-tbc", color: "gray" }, "  To be confirmed"));
+  } else {
+    schedule.forEach((entry, index) => rows.push(h(
+      Box,
+      { key: `sched-${index}`, width },
+      h(
+        Text,
+        { wrap: "truncate" },
+        h(Text, { color: "white" }, `  ${entry.name.padEnd(nameWidth, " ")}  `),
+        h(Text, { color: "yellow" }, entry.when),
+        entry.tag === "live" ? h(Text, { color: "green", bold: true }, "  ● LIVE") : undefined,
+        entry.tag === "today" ? h(Text, { color: "yellow", bold: true }, "  ◆ today") : undefined,
+        entry.tag === "done" ? h(Text, { color: "gray", dimColor: true }, "  ✓ done") : undefined,
+        entry.detail ? h(Text, { color: "gray" }, `  ${entry.detail}`) : undefined,
+      ),
+    )));
+  }
+
+  // Info
+  if (info.length > 0) {
+    spacer("info-sp");
+    rows.push(h(SectionHeading, { key: "info-h", label: "Info" }));
+    info.forEach((line, index) => rows.push(h(
+      Box,
+      { key: `info-${index}`, width },
+      h(Text, { wrap: "truncate", color: "white" }, `  ${line}`),
+    )));
+  }
+
+  // Standings (GC, points, etc.)
+  standings.forEach((standing, si) => {
+    spacer(`st-sp-${si}`);
+    rows.push(h(SectionHeading, {
+      key: `st-h-${si}`,
+      label: standing.title,
+      note: standing.total && standing.total > standing.entries.length ? `top ${standing.entries.length} of ${standing.total}` : undefined,
+    }));
+    standing.entries.forEach((entry, position) => rows.push(h(ParticipantRow, {
+      key: `st-${si}-${position}`,
+      participant: entry,
+      position: position + 1,
+      width,
+    })));
+  });
+
+  // Field (start list)
+  spacer("field-sp");
+  const fieldNote = total === 0 ? undefined : query ? `${participants.length} of ${total}` : `${total}`;
+  rows.push(h(SectionHeading, { key: "field-h", label: "Field", note: fieldNote }));
+  if (total === 0) {
+    rows.push(h(
+      Text,
+      { key: "field-empty" },
+      h(Text, { color: "gray" }, "  No parsed start list yet. "),
+      event.startListUrl
+        ? h(Text, { color: "cyan" }, compactUrl(event.startListUrl))
+        : h(Text, { color: "gray" }, "No start-list source URL available."),
+    ));
+  } else if (participants.length === 0) {
+    rows.push(h(Text, { key: "field-nomatch", color: "yellow" }, "  No entrants match the filter."));
+  } else {
+    participants.forEach((participant) => rows.push(h(ParticipantRow, {
+      key: `field-${all.indexOf(participant)}`,
+      participant,
+      position: all.indexOf(participant) + 1,
+      width,
+    })));
+  }
+
+  return rows;
+}
+
+/** Rows available for the scrollable detail body (everything below the fixed header/filter). */
+function detailVisibleRows(terminalRows: number, hasFilter: boolean): number {
+  const headerRows = 4; // border (2) + identity + source
+  const chrome = headerRows + (hasFilter ? 1 : 0) + 2 + 1; // filter + scroll indicators + footer
+  return Math.max(3, terminalRows - chrome);
 }
 
 type ScheduleEntry = { name: string; when: string; tag: "live" | "today" | "done" | ""; detail?: string };
@@ -630,18 +663,6 @@ function infoLines(event: SportsEvent): string[] {
     lines.push(`Start list: ${compactUrl(event.startListUrl)}`);
   }
   return lines;
-}
-
-/** Rows available for the scrollable field once the other detail sections are laid out. */
-function fieldRows(rows: number, scheduleCount: number, infoCount: number, hasFilter: boolean): number {
-  const headerRows = 4; // border (2) + identity + source
-  const scheduleRows = 1 + Math.max(1, scheduleCount); // heading + entries
-  const infoRows = infoCount > 0 ? 1 + infoCount : 0; // heading + lines
-  const fieldChrome = 1 + (hasFilter ? 1 : 0) + 2; // heading + filter + scroll indicators
-  const footerRows = 1;
-  const gaps = 4; // gap:1 between the stacked sections
-  const used = headerRows + scheduleRows + infoRows + fieldChrome + footerRows + gaps;
-  return Math.max(3, rows - used);
 }
 
 function Footer({ screen }: { screen: Screen }): React.ReactNode {
