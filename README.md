@@ -19,6 +19,7 @@ When run in a terminal, `sportsh` is interactive. Running it with no command ope
 Pressing `↵` on an event opens its **details page**, which has a *Schedule* section (sessions for session-based sports such as F1, otherwise the start time / date range), an *Info* section, and the *Field* (start list). The schedule tags each entry as `● LIVE`, `◆ today`, or `✓ done`.
 
 - `↑`/`↓` (or `k`/`j`) — move the selection (or scroll the start list)
+- `PgUp`/`PgDn` — page through the current view by a screenful
 - `←`/`→` — previous / next day (on a list)
 - `↵` (Enter) — open the highlighted item (a menu choice, or an event's details page)
 - `/` — filter: on a list narrows events by name/sport/status; on a details page narrows the field by name/team/nationality. Type to filter, `↵` to apply, `Esc` to clear.

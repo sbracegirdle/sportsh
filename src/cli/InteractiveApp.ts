@@ -160,6 +160,7 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
   const allEvents = listData?.status === "ready" ? listData.events : [];
   const filteredEvents = top.kind === "list" ? allEvents.filter((event) => eventMatches(event, top.query)) : [];
   const listCursor = top.kind === "list" ? Math.min(top.cursor, Math.max(0, filteredEvents.length - 1)) : 0;
+  const listPageSize = Math.max(1, Math.floor((size.rows - LIST_CHROME_ROWS) / COMPACT_CARD_HEIGHT));
 
   const detailParticipants = top.kind === "detail"
     ? participantsOf(top.event).filter((participant) => participantMatches(participant, top.query))
@@ -185,6 +186,10 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
         moveMenuCursor(-1, menuItems.length);
       } else if (key.downArrow || input === "j") {
         moveMenuCursor(1, menuItems.length);
+      } else if (key.pageUp) {
+        updateTop<MenuScreen>(() => ({ cursor: 0 }));
+      } else if (key.pageDown) {
+        updateTop<MenuScreen>(() => ({ cursor: menuItems.length - 1 }));
       } else if (key.return) {
         menuItems[current.cursor]?.activate();
       }
@@ -198,6 +203,10 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
         moveMenuCursor(-1, sportItems.length);
       } else if (key.downArrow || input === "j") {
         moveMenuCursor(1, sportItems.length);
+      } else if (key.pageUp) {
+        updateTop<SportsScreen>(() => ({ cursor: 0 }));
+      } else if (key.pageDown) {
+        updateTop<SportsScreen>(() => ({ cursor: sportItems.length - 1 }));
       } else if (key.return) {
         const choice = sportItems[current.cursor];
         if (choice) {
@@ -219,6 +228,10 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
           moveListCursor(-1);
         } else if (key.downArrow) {
           moveListCursor(1);
+        } else if (key.pageUp) {
+          moveListCursor(-listPageSize);
+        } else if (key.pageDown) {
+          moveListCursor(listPageSize);
         } else if (input && !key.ctrl && !key.meta) {
           updateTop<ListScreen>((c) => ({ query: c.query + input, cursor: 0 }));
         }
@@ -243,6 +256,10 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
         moveListCursor(-1);
       } else if (key.downArrow || input === "j") {
         moveListCursor(1);
+      } else if (key.pageUp) {
+        moveListCursor(-listPageSize);
+      } else if (key.pageDown) {
+        moveListCursor(listPageSize);
       } else if (key.return) {
         const event = filteredEvents[listCursor];
         if (event) {
@@ -280,6 +297,10 @@ export function InteractiveApp(props: InteractiveAppProps): React.ReactNode {
       updateTop<DetailScreen>((c) => ({ offset: Math.max(0, c.offset - 1) }));
     } else if (key.downArrow || input === "j") {
       updateTop<DetailScreen>((c) => ({ offset: Math.min(detailMaxOffset, c.offset + 1) }));
+    } else if (key.pageUp) {
+      updateTop<DetailScreen>((c) => ({ offset: Math.max(0, c.offset - detailFieldVisible) }));
+    } else if (key.pageDown) {
+      updateTop<DetailScreen>((c) => ({ offset: Math.min(detailMaxOffset, c.offset + detailFieldVisible) }));
     }
 
     function moveListCursor(delta: number) {
@@ -632,9 +653,9 @@ function Footer({ screen }: { screen: Screen }): React.ReactNode {
   } else if (screen.kind === "sports") {
     hint = "↑/↓ move · ↵ select · b back · q quit";
   } else if (screen.kind === "list") {
-    hint = "↑/↓ move · ←/→ day · / filter · ↵ open · b back · q quit";
+    hint = "↑/↓ move · PgUp/PgDn page · ←/→ day · / filter · ↵ open · b back · q quit";
   } else {
-    hint = "↑/↓ scroll · / filter · b back · q quit";
+    hint = "↑/↓ scroll · PgUp/PgDn page · / filter · b back · q quit";
   }
 
   return h(
